@@ -1,2 +1,2 @@
-mod uri;
-mod parser;
+pub mod uri;
+pub mod parser;

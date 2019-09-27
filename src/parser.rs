@@ -97,7 +97,8 @@ fn lex(input: &str) -> Result<(Vec<Token>, Vec<super::uri::URI>), LexError> {
     let mut tokens = vec![];
     let mut result_tokens = vec![];
     let mut uris = vec![];
-    let input = input.as_bytes();
+    // let input = input.as_bytes();
+    let input = input.chars().collect::<Vec<char>>();
     let mut pos = 0;
     macro_rules! lex_a_token {
         ($lexer:expr) => {{
@@ -114,50 +115,53 @@ fn lex(input: &str) -> Result<(Vec<Token>, Vec<super::uri::URI>), LexError> {
         }};
     }
     // let hexdig_test = b"0123456789ABCDEFabcdef";
+
     let mut next_target = "scheme";
     while pos < input.len() {
         // println!("input[{}] = {:?}", pos, input[pos] as char);
         match input[pos] {
-            b'a'..=b'z' | b'A'..=b'Z' if next_target == "scheme" => {
+            'a'..='z' | 'A'..='Z' if next_target == "scheme" => {
                 if tokens.len() > 0 {
                     let uri = tokens_to_uri(tokens.clone());
                     uris.push(uri);
                     result_tokens.extend(tokens);
                     tokens = vec![];
                 }
-                lex_a_token!(lex_scheme(input, pos));
+                lex_a_token!(lex_scheme(&input, pos));
                 next_target = "hier-part";
             },
-            b':' if pos+3 < input.len() && next_target == "hier-part" => {
-                lex_a_tokens!(lex_hier_part(input, pos+3));
+            ':' if pos+3 < input.len() && next_target == "hier-part" => {
+                lex_a_tokens!(lex_hier_part(&input, pos+3));
                 next_target = "query-or-fragment";
             },
-            b'?' if next_target == "query-or-fragment" => {
-                lex_a_token!(lex_query(input, pos+1));
+            '?' if next_target == "query-or-fragment" => {
+                lex_a_token!(lex_query(&input, pos+1));
                 next_target = "fragment";
             },
-            b'#' if next_target == "query-or-fragment" || next_target == "fragment" => {
-                lex_a_token!(lex_fragment(input, pos+1));
+            '#' if next_target == "query-or-fragment" || next_target == "fragment" => {
+                lex_a_token!(lex_fragment(&input, pos+1));
                 next_target = "scheme";
             },
-            b' ' | b'\n' | b'\t' => {
-                let((), p) = skip_spaces(input, pos)?;
+            ' ' | '\n' | '\t' => {
+                let((), p) = skip_spaces(&input, pos)?;
                 pos = p;
                 next_target = "scheme";
             },
-            b => return Err(LexError::invalid_char(b as char, Loc(pos, pos + 1))),
+            // b => return Err(LexError::invalid_char(b as char, Loc(pos, pos + 1))),
+            _b => {
+                pos += 1;
+            },
         }
     }
     if tokens.len() > 0 {
         let uri = tokens_to_uri(tokens.clone());
         uris.push(uri);
         result_tokens.extend(tokens);
-        tokens = vec![];
     }
     Ok((result_tokens, uris))
 }
 
-fn consume_byte(input: &[u8], pos: usize, b: u8) -> Result<(u8, usize), LexError> {
+fn consume_byte(input: &Vec<char>, pos: usize, b: char) -> Result<(char, usize), LexError> {
     if input.len() <= pos {
         return Err(LexError::eof(Loc(pos, pos)));
     }
@@ -171,7 +175,7 @@ fn consume_byte(input: &[u8], pos: usize, b: u8) -> Result<(u8, usize), LexError
 }
 
 // 続く限り認識
-fn recognize_many0(input: &[u8], mut pos: usize, mut f: impl FnMut(u8) -> bool) -> usize {
+fn recognize_many0(input: &Vec<char>, mut pos: usize, mut f: impl FnMut(char) -> bool) -> usize {
     while pos < input.len() && f(input[pos]) {
         pos += 1;
     }
@@ -180,10 +184,10 @@ fn recognize_many0(input: &[u8], mut pos: usize, mut f: impl FnMut(u8) -> bool) 
 
 // 指定されたポジションまで認識
 fn recognize_until_pos(
-    input: &[u8],
+    input: &Vec<char>,
     mut pos: usize,
     until_pos: usize,
-    mut f: impl FnMut(u8) -> bool
+    mut f: impl FnMut(char) -> bool
 ) -> Result<usize, LexError> {
     while pos < input.len() && pos < until_pos {
         if !f(input[pos]) {
@@ -194,23 +198,21 @@ fn recognize_until_pos(
     Ok(pos)
 }
 
-fn skip_spaces(input: &[u8], pos: usize) -> Result<((), usize), LexError> {
-    let pos = recognize_many0(input, pos, |b| b" \t\n".contains(&b));
+fn skip_spaces(input: &Vec<char>, pos: usize) -> Result<((), usize), LexError> {
+    let pos = recognize_many0(input, pos, |b| " \t\n".chars().collect::<Vec<char>>().contains(&b));
     Ok(((), pos))
 }
 
-fn lex_scheme(input: &[u8], pos: usize) -> Result<(Token, usize), LexError> {
-    use std::str::from_utf8;
-
+fn lex_scheme(input: &Vec<char>, pos: usize) -> Result<(Token, usize), LexError> {
     let start = pos;
     let end = recognize_many0(input, pos+1, |b| {
-        (b'a'..=b'z').contains(&b) || (b'A'..=b'Z').contains(&b) || (b'0'..=b'9').contains(&b) || b"+-.".contains(&b)
+        ('a'..='z').contains(&b) || ('A'..='Z').contains(&b) || ('0'..='9').contains(&b) || "+-.".chars().collect::<Vec<char>>().contains(&b)
     });
-    let data = from_utf8(&input[start..end]).unwrap();
+    let data = input[start..end].iter().collect::<String>();
     Ok((Token::scheme(data.to_string(), Loc(start, end)), end))
 }
 
-fn lex_hier_part(input: &[u8], pos: usize) -> Result<(Vec<Token>, usize), LexError> {
+fn lex_hier_part(input: &Vec<char>, pos: usize) -> Result<(Vec<Token>, usize), LexError> {
     let mut result = vec![];
     let mut result_pos;
 
@@ -236,14 +238,14 @@ fn lex_hier_part(input: &[u8], pos: usize) -> Result<(Vec<Token>, usize), LexErr
     Ok((result, result_pos))
 }
 
-fn lex_authority(input: &[u8], pos: usize) -> Result<(Token, usize), LexError> {
+fn lex_authority(input: &Vec<char>, pos: usize) -> Result<(Token, usize), LexError> {
     use std::str::from_utf8;
 
     // @までがuserinfo、:から後がport
     // スラッシュ,空白,?,#の位置を見つける
     let mut last_pos = pos;
     while last_pos < input.len() {
-        if b"/ ?#\n".contains(&input[last_pos]) {
+        if "/ ?#\n".chars().collect::<Vec<char>>().contains(&input[last_pos]) {
             break;
         }
         last_pos += 1;
@@ -252,7 +254,7 @@ fn lex_authority(input: &[u8], pos: usize) -> Result<(Token, usize), LexError> {
     let mut at_mark_pos = None;
     let mut count_pos = pos;
     while count_pos < last_pos {
-        if b'@' == input[count_pos] {
+        if '@' == input[count_pos] {
             at_mark_pos = Some(count_pos);
             break;
         }
@@ -267,7 +269,7 @@ fn lex_authority(input: &[u8], pos: usize) -> Result<(Token, usize), LexError> {
 
     let mut count_pos = host_start;
     while count_pos < last_pos {
-        if b':' == input[count_pos] {
+        if ':' == input[count_pos] {
             break;
         }
         count_pos += 1;
@@ -275,24 +277,26 @@ fn lex_authority(input: &[u8], pos: usize) -> Result<(Token, usize), LexError> {
     let host_end = count_pos;
 
     let user_info = if let Some(at_mark_pos) = at_mark_pos {
-        Some(from_utf8(&input[pos..at_mark_pos]).unwrap().to_string())
+        Some(input[pos..at_mark_pos].iter().collect::<String>())
     } else {
         None
     };
 
     let port = if last_pos > host_end + 1 {
-        Some(from_utf8(&input[(host_end+1)..last_pos]).unwrap().to_string())
+        Some(input[(host_end+1)..last_pos].iter().collect::<String>())
     } else {
         None
     };
 
-    let data = from_utf8(&input[pos..last_pos]).unwrap();
-    let host = from_utf8(&input[host_start..host_end]).unwrap();
+    // let data = from_utf8(&input[pos..last_pos]).unwrap();
+    // let host = from_utf8(&input[host_start..host_end]).unwrap();
+    let data = input[pos..last_pos].iter().collect::<String>();
+    let host = input[host_start..host_end].iter().collect::<String>();
     Ok((Token::authority(data.to_string(), host.to_string(), user_info, port, Loc(pos, last_pos)), last_pos))
 }
 
 // pos以降のsearchを探す。
-fn find_next_char_pos(input: &[u8], pos: usize, search: u8) -> Option<usize> {
+fn find_next_char_pos(input: &Vec<char>, pos: usize, search: char) -> Option<usize> {
     let mut current = pos;
     while current < input.len() {
         if search == input[current] {
@@ -305,7 +309,7 @@ fn find_next_char_pos(input: &[u8], pos: usize, search: u8) -> Option<usize> {
 }
 
 // pos以降のsearchを探すが、stoppersを超えない。
-fn find_next_char_pos_with_stoppers(input: &[u8], pos: usize, search: u8, stoppers: &[u8]) -> Option<usize> {
+fn find_next_char_pos_with_stoppers(input: &Vec<char>, pos: usize, search: char, stoppers: &Vec<char>) -> Option<usize> {
     let mut current = pos;
     while current < input.len() {
         if stoppers.contains(&input[current]) {
@@ -320,7 +324,7 @@ fn find_next_char_pos_with_stoppers(input: &[u8], pos: usize, search: u8, stoppe
     None
 }
 
-fn find_next_chars_pos(input: &[u8], pos: usize, search: &[u8]) -> Option<usize> {
+fn find_next_chars_pos(input: &Vec<char>, pos: usize, search: &Vec<char>) -> Option<usize> {
     let mut current = pos;
     while current < input.len() {
         if search.contains(&input[current]) {
@@ -332,21 +336,19 @@ fn find_next_chars_pos(input: &[u8], pos: usize, search: &[u8]) -> Option<usize>
     None
 }
 
-fn lex_path(input: &[u8], pos: usize) -> Result<(Token, usize), LexError> {
-    use std::str::from_utf8;
-
-    if b'/' != input[pos] {
+fn lex_path(input: &Vec<char>, pos: usize) -> Result<(Token, usize), LexError> {
+    if '/' != input[pos] {
         return Err(LexError::invalid_char(input[pos] as char, Loc(pos, pos+1)));
     }
 
     let mut current = pos;
     if pos+1 < input.len() {
-        if let Some(slash_pos) = find_next_char_pos_with_stoppers(input, current+1, b'/', b"?# \n") {
+        if let Some(slash_pos) = find_next_char_pos_with_stoppers(input, current+1, '/', &"?# \n".chars().collect::<Vec<char>>()) {
             let (tok, new_pos) = lex_path(input, slash_pos)?;
             current = new_pos;
         } else {
             while current < input.len() {
-                if b"?# \n".contains(&input[current]) {
+                if "?# \n".chars().collect::<Vec<char>>().contains(&input[current]) {
                     break;
                 }
                 current += 1;
@@ -354,29 +356,25 @@ fn lex_path(input: &[u8], pos: usize) -> Result<(Token, usize), LexError> {
         }
     }
 
-    let data = from_utf8(&input[pos..current]).unwrap();
+    let data = input[pos..current].iter().collect::<String>();
     Ok((Token::path(data.to_string(), Loc(pos, current)), current))
 }
 
-fn lex_query(input: &[u8], pos: usize) -> Result<(Token, usize), LexError> {
-    use std::str::from_utf8;
-
+fn lex_query(input: &Vec<char>, pos: usize) -> Result<(Token, usize), LexError> {
     let start = pos;
     let end = recognize_many0(input, start, |b| {
-        ! b" \n#[]".contains(&b)
+        ! " \n#[]".chars().collect::<Vec<char>>().contains(&b)
     });
-    let data = from_utf8(&input[start..end]).unwrap();
+    let data = input[start..end].iter().collect::<String>();
     Ok((Token::query(data.to_string(), Loc(start, end)), end))
 }
 
-fn lex_fragment(input: &[u8], pos: usize) -> Result<(Token, usize), LexError> {
-    use std::str::from_utf8;
-
+fn lex_fragment(input: &Vec<char>, pos: usize) -> Result<(Token, usize), LexError> {
     let start = pos;
     let end = recognize_many0(input, start, |b| {
-        ! b" \n#[]".contains(&b)
+        ! " \n#[]".chars().collect::<Vec<char>>().contains(&b)
     });
-    let data = from_utf8(&input[start..end]).unwrap();
+    let data = input[start..end].iter().collect::<String>();
     Ok((Token::fragment(data.to_string(), Loc(start, end)), end))
 }
 
@@ -390,9 +388,21 @@ pub fn parse_to_urls(text: &str) -> Vec<String> {
 }
 
 #[test]
+fn test_parse_to_urls() {
+    let input = r"あいうえお
+https://ccm.net/forum/affich-12027-finding-a-computer-name-using-ip
+かきくけこ https://github.com/iwot/parse-uri-rs
+    ";
+    let urls = parse_to_urls(input);
+    assert_eq!(urls.len(), 2);
+    assert_eq!(urls[0], "https://ccm.net/forum/affich-12027-finding-a-computer-name-using-ip");
+    assert_eq!(urls[1], "https://github.com/iwot/parse-uri-rs");
+}
+
+#[test]
 fn test_recognize_until_pos() {
-    let input = "01AB".as_bytes();
-    let result = recognize_until_pos(input, 1, 3, |b| b"0123456789ABCDEFabcdef".contains(&b));
+    let input = "01AB".chars().collect::<Vec<char>>();
+    let result = recognize_until_pos(&input, 1, 3, |b| "0123456789ABCDEFabcdef".chars().collect::<Vec<char>>().contains(&b));
     // println!("{:?}", String::from_utf8(input[1..3].to_vec()));
     assert_eq!(result, Ok(3));
 }
@@ -421,55 +431,55 @@ fn test_lexer() {
 
 #[test]
 fn test_lex_authority() {
-    let input = "user@192.168.121.5:8080".as_bytes();
+    let input = "user@192.168.121.5:8080".chars().collect::<Vec<char>>();
     let expect = Token::authority(
         "user@192.168.121.5:8080".to_string(),
         "192.168.121.5".to_string(),
         Some("user".to_string()),
         Some("8080".to_string()),
         Loc(0, 23));
-    assert_eq!(lex_authority(input, 0), Ok((expect, 23)));
+    assert_eq!(lex_authority(&input, 0), Ok((expect, 23)));
 }
 
 #[test]
 fn test_lex_path() {
-    let input = "/wiki/ABNF".as_bytes();
+    let input = "/wiki/ABNF".chars().collect::<Vec<char>>();
     let expect = Token::path(
         "/wiki/ABNF".to_string(),
         Loc(0, 10));
-    assert_eq!(lex_path(input, 0), Ok((expect, 10)));
+    assert_eq!(lex_path(&input, 0), Ok((expect, 10)));
 
-    let input = "/abc/def?hi=jk".as_bytes();
+    let input = "/abc/def?hi=jk".chars().collect::<Vec<char>>();
     let expect = Token::path(
         "/abc/def".to_string(),
         Loc(0, 8));
-    assert_eq!(lex_path(input, 0), Ok((expect, 8)));
+    assert_eq!(lex_path(&input, 0), Ok((expect, 8)));
 }
 
 
 
 #[test]
 fn test_lex_query() {
-    let input = "abcdef=aaaaaa&aaa=123#test".as_bytes();
+    let input = "abcdef=aaaaaa&aaa=123#test".chars().collect::<Vec<char>>();
     let expect = Token::query(
         "abcdef=aaaaaa&aaa=123".to_string(),
         Loc(0, 21));
-    assert_eq!(lex_query(input, 0), Ok((expect, 21)));
+    assert_eq!(lex_query(&input, 0), Ok((expect, 21)));
 }
 
 #[test]
 fn test_lex_fragment() {
-    let input = "aaa=123#test".as_bytes();
+    let input = "aaa=123#test".chars().collect::<Vec<char>>();
     let expect = Token::fragment(
         "test".to_string(),
         Loc(8, 12));
-    assert_eq!(lex_fragment(input, 8), Ok((expect, 12)));
+    assert_eq!(lex_fragment(&input, 8), Ok((expect, 12)));
 }
 
 #[test]
 fn test_lex_hier_part() {
-    let input = "http://user@zxy.com:8080/aa1/bb2/cc3".as_bytes();
-    let result = lex_hier_part(input, 7);
+    let input = "http://user@zxy.com:8080/aa1/bb2/cc3".chars().collect::<Vec<char>>();
+    let result = lex_hier_part(&input, 7);
     let expect_authority = Token::authority(
         "user@zxy.com:8080".to_string(),
         "zxy.com".to_string(),

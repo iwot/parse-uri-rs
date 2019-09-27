@@ -14,6 +14,7 @@ impl URI {
         raw += scheme.clone();
         raw += "://";
         raw += authority.clone();
+        raw += path.clone();
         if query.len() > 0 {
             raw += "?";
             raw += query.clone();

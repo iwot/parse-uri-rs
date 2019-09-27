@@ -1,6 +1,6 @@
 [package]
 name = "parse-uri"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["iwot <iwmt@outlook.com>"]
 edition = "2018"
 

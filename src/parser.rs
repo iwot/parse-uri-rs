@@ -73,7 +73,7 @@ impl LexError {
     }
 }
 
-fn tokens_to_uri(tokens: Vec<Token>) -> super::uri::URI {
+fn tokens_to_uri(tokens: Vec<Token>) -> Option<super::uri::URI> {
     let mut scheme = String::new();
     let mut authority = String::new();
     let mut path = String::new();
@@ -90,7 +90,11 @@ fn tokens_to_uri(tokens: Vec<Token>) -> super::uri::URI {
         }
     }
 
-    super::uri::URI::new(&scheme, &authority, &path, &fragment, &query)
+    if scheme.len() == 0 || authority.len() == 0 {
+        None
+    } else {
+        Some(super::uri::URI::new(&scheme, &authority, &path, &fragment, &query))
+    }
 }
 
 fn lex(input: &str) -> Result<(Vec<Token>, Vec<super::uri::URI>), LexError> {
@@ -122,9 +126,10 @@ fn lex(input: &str) -> Result<(Vec<Token>, Vec<super::uri::URI>), LexError> {
         match input[pos] {
             'a'..='z' | 'A'..='Z' if next_target == "scheme" => {
                 if tokens.len() > 0 {
-                    let uri = tokens_to_uri(tokens.clone());
-                    uris.push(uri);
-                    result_tokens.extend(tokens);
+                    if let Some(uri) = tokens_to_uri(tokens.clone()) {
+                        uris.push(uri);
+                        result_tokens.extend(tokens);
+                    }
                     tokens = vec![];
                 }
                 lex_a_token!(lex_scheme(&input, pos));
@@ -154,9 +159,10 @@ fn lex(input: &str) -> Result<(Vec<Token>, Vec<super::uri::URI>), LexError> {
         }
     }
     if tokens.len() > 0 {
-        let uri = tokens_to_uri(tokens.clone());
-        uris.push(uri);
-        result_tokens.extend(tokens);
+        if let Some(uri) = tokens_to_uri(tokens.clone()) {
+            uris.push(uri);
+            result_tokens.extend(tokens);
+        }
     }
     Ok((result_tokens, uris))
 }
@@ -389,7 +395,7 @@ pub fn parse_to_urls(text: &str) -> Vec<String> {
 
 #[test]
 fn test_parse_to_urls() {
-    let input = r"あいうえお
+    let input = r"あいうえお abc.ABC
 https://ccm.net/forum/affich-12027-finding-a-computer-name-using-ip
 かきくけこ https://github.com/iwot/parse-uri-rs
     ";

@@ -169,7 +169,7 @@ fn lex(input: &str) -> Result<(Vec<Token>, Vec<super::uri::URI>), LexError> {
                 lex_a_token!(lex_fragment(&input, pos+1));
                 next_target = "scheme";
             },
-            ' ' | '\r' | '\n' | '\t' if next_target != "hier-part" && next_target != "query-or-fragment" && next_target != "fragment" => {
+            ' ' | '\n' | '\t' if next_target != "hier-part" && next_target != "query-or-fragment" && next_target != "fragment" => {
                 let((), p) = skip_spaces(&input, pos)?;
                 pos = p;
                 next_target = "scheme";
@@ -417,9 +417,14 @@ pub fn extract_urls(text: &str) -> Vec<String> {
 
 #[test]
 fn test_extract_urls() {
-    let input = r"あいうえお abc.ABC
-https://ccm.net/forum/affich-12027-finding-a-computer-name-using-ip
-かきくけこ https://github.com/iwot/parse-uri-rs
+    let input = "あいうえお abc.ABC\r\nhttps://ccm.net/forum/affich-12027-finding-a-computer-name-using-ip\r\nかきくけこ https://github.com/iwot/parse-uri-rs
+    ";
+    let urls = extract_urls(input);
+    assert_eq!(urls.len(), 2);
+    assert_eq!(urls[0], "https://ccm.net/forum/affich-12027-finding-a-computer-name-using-ip");
+    assert_eq!(urls[1], "https://github.com/iwot/parse-uri-rs");
+
+    let input = "あいうえお abc.ABC\nhttps://ccm.net/forum/affich-12027-finding-a-computer-name-using-ip\nかきくけこ https://github.com/iwot/parse-uri-rs
     ";
     let urls = extract_urls(input);
     assert_eq!(urls.len(), 2);

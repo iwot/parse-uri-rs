@@ -133,24 +133,36 @@ fn lex(input: &str) -> Result<(Vec<Token>, Vec<super::uri::URI>), LexError> {
                     tokens = vec![];
                 }
                 lex_a_token!(lex_scheme(&input, pos));
-                next_target = match &input[pos] {
-                    ':' => "hier-part",
-                    _ => "scheme",
+                next_target = if input.len() > pos {
+                    match &input[pos] {
+                        ':' => "hier-part",
+                        _ => "scheme",
+                    }
+                } else {
+                    ""
                 }
             },
             ':' if pos+3 < input.len() && next_target == "hier-part" => {
                 lex_a_tokens!(lex_hier_part(&input, pos+3));
-                next_target = match &input[pos] {
-                    '?' => "query",
-                    '#' => "fragment",
-                    _ => "scheme",
+                next_target = if input.len() > pos {
+                    match &input[pos] {
+                        '?' => "query",
+                        '#' => "fragment",
+                        _ => "scheme",
+                    }
+                } else {
+                    ""
                 }
             },
             '?' if next_target == "query" => {
                 lex_a_token!(lex_query(&input, pos+1));
-                next_target = match &input[pos] {
-                    '#' => "fragment",
-                    _ => "scheme",
+                next_target = if input.len() > pos {
+                    match &input[pos] {
+                        '#' => "fragment",
+                        _ => "scheme",
+                    }
+                } else {
+                    ""
                 }
             },
             '#' if next_target == "fragment" => {

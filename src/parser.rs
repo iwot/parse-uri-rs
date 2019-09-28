@@ -133,21 +133,31 @@ fn lex(input: &str) -> Result<(Vec<Token>, Vec<super::uri::URI>), LexError> {
                     tokens = vec![];
                 }
                 lex_a_token!(lex_scheme(&input, pos));
-                next_target = "hier-part";
+                next_target = match &input[pos] {
+                    ':' => "hier-part",
+                    _ => "scheme",
+                }
             },
             ':' if pos+3 < input.len() && next_target == "hier-part" => {
                 lex_a_tokens!(lex_hier_part(&input, pos+3));
-                next_target = "query-or-fragment";
+                next_target = match &input[pos] {
+                    '?' => "query",
+                    '#' => "fragment",
+                    _ => "scheme",
+                }
             },
-            '?' if next_target == "query-or-fragment" => {
+            '?' if next_target == "query" => {
                 lex_a_token!(lex_query(&input, pos+1));
-                next_target = "fragment";
+                next_target = match &input[pos] {
+                    '#' => "fragment",
+                    _ => "scheme",
+                }
             },
-            '#' if next_target == "query-or-fragment" || next_target == "fragment" => {
+            '#' if next_target == "fragment" => {
                 lex_a_token!(lex_fragment(&input, pos+1));
                 next_target = "scheme";
             },
-            ' ' | '\r' | '\n' | '\t' => {
+            ' ' | '\r' | '\n' | '\t' if next_target != "hier-part" && next_target != "query-or-fragment" && next_target != "fragment" => {
                 let((), p) = skip_spaces(&input, pos)?;
                 pos = p;
                 next_target = "scheme";
@@ -251,7 +261,7 @@ fn lex_authority(input: &Vec<char>, pos: usize) -> Result<(Token, usize), LexErr
     // スラッシュ,空白,?,#の位置を見つける
     let mut last_pos = pos;
     while last_pos < input.len() {
-        if "/ ?#\n".chars().collect::<Vec<char>>().contains(&input[last_pos]) {
+        if "/ ?#\r\n".chars().collect::<Vec<char>>().contains(&input[last_pos]) {
             break;
         }
         last_pos += 1;
@@ -349,12 +359,12 @@ fn lex_path(input: &Vec<char>, pos: usize) -> Result<(Token, usize), LexError> {
 
     let mut current = pos;
     if pos+1 < input.len() {
-        if let Some(slash_pos) = find_next_char_pos_with_stoppers(input, current+1, '/', &"?# \n".chars().collect::<Vec<char>>()) {
+        if let Some(slash_pos) = find_next_char_pos_with_stoppers(input, current+1, '/', &"?# \r\n".chars().collect::<Vec<char>>()) {
             let (tok, new_pos) = lex_path(input, slash_pos)?;
             current = new_pos;
         } else {
             while current < input.len() {
-                if "?# \n".chars().collect::<Vec<char>>().contains(&input[current]) {
+                if "?# \r\n".chars().collect::<Vec<char>>().contains(&input[current]) {
                     break;
                 }
                 current += 1;
@@ -369,7 +379,7 @@ fn lex_path(input: &Vec<char>, pos: usize) -> Result<(Token, usize), LexError> {
 fn lex_query(input: &Vec<char>, pos: usize) -> Result<(Token, usize), LexError> {
     let start = pos;
     let end = recognize_many0(input, start, |b| {
-        ! " \n#[]".chars().collect::<Vec<char>>().contains(&b)
+        ! " \r\n#[]".chars().collect::<Vec<char>>().contains(&b)
     });
     let data = input[start..end].iter().collect::<String>();
     Ok((Token::query(data.to_string(), Loc(start, end)), end))
@@ -378,13 +388,13 @@ fn lex_query(input: &Vec<char>, pos: usize) -> Result<(Token, usize), LexError> 
 fn lex_fragment(input: &Vec<char>, pos: usize) -> Result<(Token, usize), LexError> {
     let start = pos;
     let end = recognize_many0(input, start, |b| {
-        ! " \n#[]".chars().collect::<Vec<char>>().contains(&b)
+        ! " \r\n#[]".chars().collect::<Vec<char>>().contains(&b)
     });
     let data = input[start..end].iter().collect::<String>();
     Ok((Token::fragment(data.to_string(), Loc(start, end)), end))
 }
 
-pub fn parse_to_urls(text: &str) -> Vec<String> {
+pub fn extract_urls(text: &str) -> Vec<String> {
     let result = lex(text);
     if result.is_ok() {
         result.unwrap().1.iter().map(|p| p.raw()).collect()
@@ -394,12 +404,12 @@ pub fn parse_to_urls(text: &str) -> Vec<String> {
 }
 
 #[test]
-fn test_parse_to_urls() {
+fn test_extract_urls() {
     let input = r"あいうえお abc.ABC
 https://ccm.net/forum/affich-12027-finding-a-computer-name-using-ip
 かきくけこ https://github.com/iwot/parse-uri-rs
     ";
-    let urls = parse_to_urls(input);
+    let urls = extract_urls(input);
     assert_eq!(urls.len(), 2);
     assert_eq!(urls[0], "https://ccm.net/forum/affich-12027-finding-a-computer-name-using-ip");
     assert_eq!(urls[1], "https://github.com/iwot/parse-uri-rs");

@@ -147,7 +147,7 @@ fn lex(input: &str) -> Result<(Vec<Token>, Vec<super::uri::URI>), LexError> {
                 lex_a_token!(lex_fragment(&input, pos+1));
                 next_target = "scheme";
             },
-            ' ' | '\n' | '\t' => {
+            ' ' | '\r' | '\n' | '\t' => {
                 let((), p) = skip_spaces(&input, pos)?;
                 pos = p;
                 next_target = "scheme";
